@@ -1,17 +1,10 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter } from 'next/font/google'; // Use a standard font like Inter
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Import Toaster
+import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from '@/context/AuthContext'; // Import AuthProvider
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Food Journal',
@@ -25,9 +18,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
-        <Toaster /> {/* Add Toaster component here */}
+      <body className={`${inter.className} antialiased`}>
+         {/* Wrap children with AuthProvider */}
+        <AuthProvider>
+            {children}
+            <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

@@ -5,70 +5,62 @@ import { useToast } from '@/hooks/use-toast';
 import { Utensils, Refrigerator } from 'lucide-react';
 import type { LogEvent, EventType } from '@/lib/types';
 import { useState } from 'react';
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+// Input and Label for userIdentifier are removed
 
 interface LogButtonsProps {
-  onLogEvent: (event: LogEvent) => Promise<void>;
+  // onLogEvent now expects only the type, as user/group info comes from context
+  onLogEvent: (eventData: Pick<LogEvent, 'type' | 'timestamp'>) => Promise<void>;
 }
 
 export function LogButtons({ onLogEvent }: LogButtonsProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState<EventType | null>(null);
-  const [userIdentifier, setUserIdentifier] = useState<string>('');
+  // userIdentifier state is removed
 
   const handleLog = async (type: EventType) => {
     setLoading(type);
-    const newEvent: LogEvent = {
-      id: crypto.randomUUID(),
+    // Create a partial event object; the full details (userId, groupId, etc.)
+    // will be added in the parent component (Home page) using AuthContext.
+    const partialEvent: Pick<LogEvent, 'type' | 'timestamp'> = {
       type: type,
-      timestamp: new Date(),
-      userIdentifier: userIdentifier || undefined, // Add user identifier if provided
+      timestamp: new Date(), // Timestamp generated client-side for immediate feedback
     };
 
     try {
-      await onLogEvent(newEvent);
-      toast({
-        title: 'Event Logged',
-        description: `${type === 'FOOD_INTAKE' ? 'Food intake' : 'Fridge storage'} logged successfully at ${new Date().toLocaleTimeString()}.`,
-        variant: 'default',
-      });
-      // Clear identifier after logging 'Ate Food' as the next action is likely 'Fridge Storage' by someone else or reminder needed
-      if (type === 'FOOD_INTAKE') {
-         // Keep identifier for fridge storage for now, maybe clear later if needed
-         // setUserIdentifier('');
-      }
+      await onLogEvent(partialEvent);
+      // Parent component (Home page) now handles the success/error logic and toasts
+      // as it has the full context (user info, etc.)
+       toast({
+         title: 'Event Logged',
+         description: `${type === 'FOOD_INTAKE' ? 'Food intake' : 'Fridge storage'} logged.`,
+         variant: 'default',
+       });
     } catch (error) {
-      console.error('Failed to log event:', error);
-      toast({
-        title: 'Error Logging Event',
-        description: 'There was a problem saving the event. Please try again.',
-        variant: 'destructive',
-      });
+      // Error handling might still be useful here for button state,
+      // but primary error display is in the parent.
+      console.error('Initiating log event failed:', error);
+        toast({
+           title: 'Error',
+           description: 'Could not log event. Please try again.',
+           variant: 'destructive',
+       });
     } finally {
       setLoading(null);
     }
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-4 w-full">
-      <div className="flex-1 w-full sm:w-auto">
-          <Label htmlFor="userIdentifier" className="mb-1 block text-sm font-medium">Your Identifier (Optional - e.g., Name/Phone# for Reminder)</Label>
-          <Input
-            id="userIdentifier"
-            type="text"
-            placeholder="Enter name or phone number"
-            value={userIdentifier}
-            onChange={(e) => setUserIdentifier(e.target.value)}
-            className="mb-4 sm:mb-0"
-            aria-label="User Identifier for Logging"
-          />
-      </div>
-      <div className="flex gap-4 w-full sm:w-auto justify-center">
+    // Removed outer div wrapping input and buttons for cleaner layout
+    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full">
+      {/* User Identifier Input is removed */}
+      {/* <div className="flex-1 w-full sm:w-auto"> ... </div> */}
+
+      {/* Buttons take full width available in the flex container */}
+      {/* <div className="flex gap-4 w-full sm:w-auto justify-center"> */}
         <Button
           onClick={() => handleLog('FOOD_INTAKE')}
           disabled={loading === 'FOOD_INTAKE'}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground flex-1 sm:flex-none min-w-[140px]"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground flex-1 sm:flex-none min-w-[140px] w-full sm:w-auto"
           aria-busy={loading === 'FOOD_INTAKE'}
           aria-live="polite"
         >
@@ -83,7 +75,8 @@ export function LogButtons({ onLogEvent }: LogButtonsProps) {
         <Button
           onClick={() => handleLog('FRIDGE_STORAGE')}
           disabled={loading === 'FRIDGE_STORAGE'}
-          className="bg-blue-500 hover:bg-blue-600 text-white flex-1 sm:flex-none min-w-[140px]"
+          // Use theme colors or define a specific style if needed
+          className="bg-blue-500 hover:bg-blue-600 text-white flex-1 sm:flex-none min-w-[140px] w-full sm:w-auto" // Example custom color - consider adding to theme if used often
           aria-busy={loading === 'FRIDGE_STORAGE'}
           aria-live="polite"
         >
@@ -95,7 +88,7 @@ export function LogButtons({ onLogEvent }: LogButtonsProps) {
             </>
           )}
         </Button>
-      </div>
+      {/* </div> */}
     </div>
   );
 }
