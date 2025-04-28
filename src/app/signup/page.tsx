@@ -18,14 +18,15 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState(''); // Added WhatsApp Number state
+  // Removed phoneNumber state
+  // const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
-  // Basic phone number validation (adjust regex as needed for desired format)
-  const isValidPhoneNumber = (num: string) => /^\+?[0-9\s-()]{7,}$/.test(num);
+  // Removed phone number validation
+  // const isValidPhoneNumber = (num: string) => /^\+?[0-9\s-()]{7,}$/.test(num);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,27 +44,9 @@ export default function SignupPage() {
         return;
     }
 
-    if (!phoneNumber.trim()) {
-        setError("WhatsApp Number is required.");
-        toast({
-            title: "Signup Failed",
-            description: "Please enter your WhatsApp number.",
-            variant: "destructive",
-        });
-        setLoading(false);
-        return;
-    }
-
-     if (!isValidPhoneNumber(phoneNumber)) {
-         setError("Please enter a valid phone number (e.g., +1234567890).");
-         toast({
-             title: "Signup Failed",
-             description: "Please enter a valid phone number.",
-             variant: "destructive",
-         });
-         setLoading(false);
-         return;
-     }
+    // Removed phone number checks
+    // if (!phoneNumber.trim()) { ... }
+    // if (!isValidPhoneNumber(phoneNumber)) { ... }
 
 
     if (password.length < 6) {
@@ -82,19 +65,20 @@ export default function SignupPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // 2. Update Firebase Auth profile (optional but good practice)
+      // 2. Update Firebase Auth profile
       await updateProfile(user, { displayName: displayName });
 
       // 3. Create user profile document in Firestore
       const userDocRef = doc(db, 'users', user.uid);
-       // New users start without a group and as 'member' role
+       // New users start without a group, role 'member', and no FCM token yet
       const newUserProfile: UserProfile = {
           uid: user.uid,
-          email: user.email, // Still store email from auth
-          displayName: displayName.trim(), // Save trimmed display name
-          phoneNumber: phoneNumber.trim(), // Save trimmed phone number
-          groupId: null, // Start without a group
-          role: 'member', // Default role
+          email: user.email,
+          displayName: displayName.trim(),
+          phoneNumber: '', // Set phone number to empty string or null if field still exists
+          fcmToken: null, // Initialize fcmToken as null
+          groupId: null,
+          role: 'member',
           createdAt: Timestamp.now()
       };
       await setDoc(userDocRef, newUserProfile);
@@ -103,10 +87,9 @@ export default function SignupPage() {
           title: "Signup Successful",
           description: "Account created. Please wait to be added to a group by an admin.",
       });
-      router.push('/'); // Redirect to home page (or a 'wait for admin' page)
+      router.push('/'); // Redirect to home page
     } catch (err: any) {
       console.error("Signup failed:", err);
-      // Provide more specific error messages
       let friendlyError = 'Failed to create account. Please try again.';
       if (err.code === 'auth/email-already-in-use') {
           friendlyError = 'This email address is already in use. Please try logging in.';
@@ -114,7 +97,11 @@ export default function SignupPage() {
           friendlyError = 'The password is too weak. Please choose a stronger password.';
       } else if (err.code === 'auth/invalid-email') {
            friendlyError = 'Please enter a valid email address.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+          friendlyError = 'Email/password accounts are not enabled. Contact support.';
+          // Make sure Email/Password sign-in is enabled in your Firebase project Authentication settings.
       }
+
 
       setError(friendlyError);
       toast({
@@ -144,22 +131,15 @@ export default function SignupPage() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Your Name"
-                required // Make required
+                required
                 disabled={loading}
               />
             </div>
-             <div>
+             {/* Removed Phone Number Input Field */}
+             {/* <div>
               <Label htmlFor="phoneNumber">WhatsApp Number</Label>
-              <Input
-                id="phoneNumber"
-                type="tel" // Use 'tel' type for phone numbers
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                required // Make required
-                placeholder="+1 123 456 7890"
-                disabled={loading}
-              />
-            </div>
+              <Input ... />
+            </div> */}
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
@@ -168,6 +148,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 placeholder="you@example.com"
                 disabled={loading}
               />
@@ -180,6 +161,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="new-password"
                 placeholder="•••••••• (min. 6 characters)"
                 disabled={loading}
               />

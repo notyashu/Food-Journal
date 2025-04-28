@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,16 +6,18 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { LogButtons } from '@/components/food-journal/LogButtons';
 import { EventHistory } from '@/components/food-journal/EventHistory';
-import { ReminderButton } from '@/components/food-journal/ReminderButton'; // Assuming this is updated or handled elsewhere
+import { ReminderButton } from '@/components/food-journal/ReminderButton';
 import type { LogEvent } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Button } from '@/components/ui/button'; // For Logout and Admin
-import { db } from '@/lib/firebase';
-import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
+import { db, app as firebaseApp } from '@/lib/firebase'; // Import client app instance
+import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase'; // Import auth for sign out
-import Link from 'next/link'; // For linking to admin page
+import { auth } from '@/lib/firebase';
+import Link from 'next/link';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging'; // Import FCM functions
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 
 export default function Home() {
@@ -22,6 +25,77 @@ export default function Home() {
   const router = useRouter();
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+   const { toast } = useToast(); // Initialize toast
+
+   // --- FCM Initialization Effect ---
+   useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user && userProfile && firebaseApp) {
+        // Check if Notification permission is granted
+        if (Notification.permission === 'granted') {
+             const messaging = getMessaging(firebaseApp);
+
+            // Request FCM token
+            getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY }) // Replace with your VAPID key env variable
+                .then((currentToken) => {
+                    if (currentToken) {
+                        console.log('FCM Token:', currentToken);
+                        // Check if token needs to be updated in Firestore
+                        if (userProfile.fcmToken !== currentToken) {
+                            const userDocRef = doc(db, 'users', user.uid);
+                            updateDoc(userDocRef, { fcmToken: currentToken })
+                                .then(() => console.log('FCM token updated in Firestore.'))
+                                .catch((err) => console.error('Error updating FCM token:', err));
+                        }
+                    } else {
+                        // Show permission request UI
+                        console.log('No registration token available. Request permission to generate one.');
+                        // Potentially show a button or message asking the user to enable notifications
+                         toast({
+                            title: "Enable Notifications",
+                            description: "Please allow notifications to receive reminders.",
+                            variant: "default", // or "warning"
+                         });
+                    }
+                }).catch((err) => {
+                    console.error('An error occurred while retrieving token. ', err);
+                    // Handle errors like no service worker, etc.
+                     toast({
+                        title: "Notification Error",
+                        description: "Could not get permission for notifications.",
+                        variant: "destructive",
+                    });
+                });
+
+            // Handle foreground messages (optional)
+            onMessage(messaging, (payload) => {
+                console.log('Message received in foreground. ', payload);
+                 // Show a toast or update UI based on the message
+                toast({
+                    title: payload.notification?.title || 'Notification',
+                    description: payload.notification?.body || '',
+                });
+            });
+
+        } else if (Notification.permission === 'default') {
+            console.log("Notification permission not yet requested.");
+            // Consider prompting the user later or via a button click
+             // Example: show a button to request permission
+        } else {
+             console.log("Notification permission denied.");
+              toast({
+                  title: "Notifications Blocked",
+                  description: "Reminders are disabled. Please enable notifications in your browser settings.",
+                  variant: "warning",
+              });
+        }
+    } else if (user && !userProfile) {
+         console.log("User profile still loading or not available for FCM setup.");
+    } else if (!user) {
+         console.log("User not logged in, skipping FCM setup.");
+    }
+
+   }, [user, userProfile, firebaseApp, toast]); // Rerun when user or profile changes
+
 
   useEffect(() => {
     // Redirect to login if not authenticated and not loading
@@ -53,7 +127,7 @@ export default function Home() {
       }, (error) => {
         console.error("Error fetching events: ", error);
         setIsLoadingEvents(false);
-        // Optionally show an error toast
+         toast({ title: "Error", description: "Could not load event history.", variant: "destructive" });
       });
 
       // Cleanup listener on unmount
@@ -61,7 +135,6 @@ export default function Home() {
     } else if (!loading && user && !userProfile?.groupId) {
         // Handle case where user is logged in but has no group assigned yet
         console.log("User logged in but no group assigned.");
-        // You might want to show a message or redirect to a group selection/creation page
         setIsLoadingEvents(false); // Stop loading indicator
         setEvents([]); // Clear events
     } else if (!loading && !user) {
@@ -70,13 +143,13 @@ export default function Home() {
         setEvents([]);
     }
 
-  }, [user, userProfile, loading, router]);
+  }, [user, userProfile, loading, router, toast]);
 
 
   const handleLogEvent = async (newEventData: Omit<LogEvent, 'id' | 'groupId' | 'userId' | 'userName'>) => {
     if (!user || !userProfile?.groupId) {
       console.error("User not authenticated or no group ID found");
-      // Optionally show a toast error
+      toast({ title: "Error", description: "Cannot log event. Please log in.", variant: "destructive" });
       return;
     }
 
@@ -93,20 +166,24 @@ export default function Home() {
       await addDoc(eventsColRef, eventWithUserDetails);
       // Firestore listener will automatically update the UI, no need to manually setEvents
       console.log("Event logged successfully");
-      // Optionally show a success toast
+       // Toast moved to LogButtons for immediate feedback
     } catch (error) {
       console.error('Failed to log event:', error);
-      // Optionally show an error toast
+       toast({ title: "Error", description: "Failed to save the event.", variant: "destructive" });
     }
   };
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      // Clear local state immediately for faster UI update
+      setEvents([]);
+      // FCM token cleanup might be handled by service worker or browser
       router.push('/login'); // Redirect to login page after successful logout
+       toast({ title: "Logged Out", description: "You have been logged out successfully." });
     } catch (error) {
       console.error("Error signing out: ", error);
-      // Optionally show an error toast
+       toast({ title: "Logout Error", description: "Could not log out. Please try again.", variant: "destructive" });
     }
   };
 
@@ -114,25 +191,49 @@ export default function Home() {
   // Find the latest food intake event *for the current group*
  const lastFoodIntakeEvent = events
     .filter(event => event.type === 'FOOD_INTAKE' && event.userId) // userId should always exist now
-    .sort((a, b) => (b.timestamp as Date).getTime() - (a.timestamp as Date).getTime())[0]; // Ensure timestamps are Dates for comparison
+    .sort((a, b) => (getDateFromTimestamp(b.timestamp)).getTime() - (getDateFromTimestamp(a.timestamp)).getTime())[0]; // Ensure timestamps are Dates for comparison
 
 
   // Don't render anything substantial until loading is complete and user is verified
-  if (loading || !user) {
-    return null; // Or a minimal loading indicator if preferred, but AuthProvider handles the main loading screen
-  }
+   if (loading) {
+       // You might want a more integrated loading skeleton here matching the card layout
+    return (
+        <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8 md:p-12 lg:p-24 bg-background">
+            <Card className="w-full max-w-3xl shadow-xl rounded-lg overflow-hidden">
+                <CardHeader className="bg-primary/50 p-6 h-[92px] animate-pulse" />
+                 <CardContent className="p-6 space-y-6">
+                     <div className="h-10 bg-muted rounded animate-pulse w-1/2 mx-auto"></div>
+                     <Separator />
+                     <div className="h-10 bg-muted rounded animate-pulse w-1/3 ml-auto"></div>
+                      <Separator />
+                     <div className="space-y-3 h-[400px] overflow-hidden">
+                         <div className="h-12 bg-secondary rounded animate-pulse"></div>
+                         <div className="h-12 bg-secondary rounded animate-pulse"></div>
+                         <div className="h-12 bg-secondary rounded animate-pulse"></div>
+                     </div>
+                 </CardContent>
+            </Card>
+        </main>
+    );
+   }
+
 
   // Handle case where user is logged in but not yet in a group
-  if (!userProfile?.groupId) {
+  if (user && !userProfile?.groupId) {
       return (
           <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8 md:p-12 lg:p-24 bg-background">
                <Card className="w-full max-w-md text-center p-6 shadow-lg rounded-lg">
                    <CardHeader>
-                       <CardTitle>Welcome!</CardTitle>
+                       <CardTitle>Welcome, {userProfile?.displayName || user.email}!</CardTitle>
                    </CardHeader>
                    <CardContent>
                        <p className="text-muted-foreground mb-4">You are logged in but not yet part of a food journal group.</p>
-                       <p className="text-muted-foreground mb-6">Please contact your group admin to be added.</p>
+                       <p className="text-muted-foreground mb-6">Please contact your group admin to add you, or create a group if you are the admin.</p>
+                         {isAdmin && ( // Show Admin button only if designated as admin
+                           <Link href="/admin" passHref>
+                               <Button variant="default" className="mb-2 mr-2">Go to Admin Panel</Button>
+                           </Link>
+                       )}
                        <Button onClick={handleLogout} variant="outline">Logout</Button>
                    </CardContent>
                </Card>
@@ -141,14 +242,15 @@ export default function Home() {
   }
 
 
+  // Main authenticated view
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8 md:p-12 lg:p-24 bg-background">
       <Card className="w-full max-w-3xl shadow-xl rounded-lg overflow-hidden">
-        <CardHeader className="bg-primary text-primary-foreground p-6 flex flex-row justify-between items-center">
+        <CardHeader className="bg-primary text-primary-foreground p-6 flex flex-row justify-between items-center flex-wrap gap-2">
           <div>
               <CardTitle className="text-3xl font-bold">Food Journal</CardTitle>
               <CardDescription className="text-primary-foreground/80 pt-1">
-                Group: {userProfile?.groupId} {/* Display group ID or name if available */}
+                Group: {userProfile?.groupName || userProfile?.groupId || 'Loading...'} {/* TODO: Fetch and display group name */}
               </CardDescription>
           </div>
            <div className="flex items-center gap-2">
@@ -165,21 +267,39 @@ export default function Home() {
         <CardContent className="p-6 space-y-6">
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-foreground">Log New Event</h2>
-            {/* Pass simplified handler */}
             <LogButtons onLogEvent={handleLogEvent} />
           </div>
 
           <Separator />
 
            <div className="space-y-4">
-             <div className="flex justify-between items-center">
+             <div className="flex justify-between items-center flex-wrap gap-2">
                  <h2 className="text-lg font-semibold text-foreground">Need to Remind?</h2>
-                 {/* ReminderButton needs update to fetch phone number from user profile based on userId */}
+                  {/* ReminderButton now handles FCM */}
                  <ReminderButton lastFoodIntakeEvent={lastFoodIntakeEvent} />
              </div>
             <p className="text-sm text-muted-foreground">
-               Send a WhatsApp reminder to the last person who logged eating (if they have a phone number in their profile).
+                {/* Updated description for FCM */}
+               Send an in-app notification reminder to the last person who logged eating (if they have notifications enabled).
             </p>
+             {Notification.permission !== 'granted' && (
+                 <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={() => {
+                         Notification.requestPermission().then(permission => {
+                             if (permission === 'granted') {
+                                 toast({ title: "Notifications Enabled", description: "You can now receive reminders." });
+                                 // Optionally trigger FCM token refresh here if needed
+                             } else {
+                                 toast({ title: "Notifications Blocked", description: "Reminders remain disabled.", variant: "warning" });
+                             }
+                         });
+                     }}
+                     >
+                     Request Notification Permission
+                 </Button>
+             )}
           </div>
 
 
@@ -196,4 +316,16 @@ export default function Home() {
       </Card>
     </main>
   );
+}
+
+// Helper to convert Firestore Timestamp or Date to Date object
+function getDateFromTimestamp(timestamp: Date | Timestamp | undefined): Date {
+     if (!timestamp) return new Date();
+    if (timestamp instanceof Date) {
+        return timestamp;
+    }
+    if (timestamp && typeof (timestamp as Timestamp).toDate === 'function') {
+        return (timestamp as Timestamp).toDate();
+    }
+    return new Date();
 }

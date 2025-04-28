@@ -1,39 +1,76 @@
+
 'use server';
 
-// import { sendWhatsAppMessage, type PhoneNumber } from '@/services/whatsapp'; // Keep if needed elsewhere
-import { sendWhatsAppMessage } from '@/services/whatsapp'; // Simplified import
+import { sendFcmNotification } from '@/services/fcm'; // Import FCM service
+import { db } from '@/lib/firebase'; // Import Firestore client db
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { revalidatePath } from 'next/cache';
+import type { LogEvent } from '@/lib/types'; // Import LogEvent type
 
 interface ActionResult {
   success: boolean;
   message: string;
 }
 
-// Updated to accept a simple string or undefined
-export async function sendReminderAction(phoneNumber: string | undefined | null): Promise<ActionResult> {
-  if (!phoneNumber) {
-    return { success: false, message: 'Phone number not provided or not found.' };
+// Updated action to send FCM reminder and log the event
+export async function sendReminderAction(
+    targetUserId: string,
+    targetUserName: string | undefined,
+    targetFcmToken: string | undefined | null,
+    actorUserId: string, // User who initiated the reminder
+    actorUserName: string | undefined,
+    groupId: string
+): Promise<ActionResult> {
+  if (!targetFcmToken) {
+    return { success: false, message: 'Target user does not have an FCM token. Cannot send notification.' };
   }
+  if (!groupId) {
+       return { success: false, message: 'Group ID not provided.' };
+   }
+    if (!actorUserId) {
+       return { success: false, message: 'Actor User ID not provided.' };
+   }
 
-  // Construct the PhoneNumber object if your service still requires it
-  // Otherwise, directly use the phoneNumber string if the service accepts it
-  // const phone: PhoneNumber = { phoneNumber }; // Uncomment if needed by sendWhatsAppMessage
-  const message = 'Remember to put the food in the fridge!';
+
+  const title = 'Food Journal Reminder';
+  const message = `Hi ${targetUserName || 'there'}, remember to put the food in the fridge!`;
 
   try {
-    // Pass the phone number string directly if the service allows
-    // Or pass the 'phone' object if required: await sendWhatsAppMessage(phone, message);
-    const success = await sendWhatsAppMessage({ phoneNumber }, message); // Assuming service needs object
+    // Send the FCM notification
+    const fcmSuccess = await sendFcmNotification(targetFcmToken, title, message);
 
-    if (success) {
-        // revalidatePath('/'); // Optional: revalidate page if needed
-        return { success: true, message: 'WhatsApp reminder sent successfully!' };
+    if (fcmSuccess) {
+        // Log the notification event to Firestore
+        const eventLog: Omit<LogEvent, 'id'> = {
+            type: 'NOTIFICATION_SENT',
+            timestamp: Timestamp.now(),
+            userId: actorUserId, // The user *sending* the notification
+            userName: actorUserName || 'System',
+            groupId: groupId,
+            targetUserId: targetUserId, // The user *receiving* the notification
+            targetUserName: targetUserName || 'Unknown User',
+            notificationType: 'FCM',
+        };
+
+        try {
+             const eventsColRef = collection(db, 'groups', groupId, 'events');
+             await addDoc(eventsColRef, eventLog);
+             console.log("Notification sent event logged successfully");
+              // Revalidate the main page to show the new event in history
+             revalidatePath('/');
+             return { success: true, message: 'FCM reminder sent and logged successfully!' };
+        } catch (logError) {
+             console.error('Error logging notification sent event:', logError);
+             // Even if logging fails, the notification might have been sent.
+             // Consider the desired behavior here. Maybe return success but with a warning?
+             return { success: true, message: 'FCM reminder sent, but failed to log the event.' };
+        }
+
     } else {
-        return { success: false, message: 'Failed to send WhatsApp reminder (service error).' };
+        return { success: false, message: 'Failed to send FCM reminder (service error).' };
     }
   } catch (error) {
-    console.error('Error sending WhatsApp message via server action:', error);
-    // Provide a more user-friendly error message
+    console.error('Error sending FCM reminder via server action:', error);
     return { success: false, message: 'An error occurred while attempting to send the reminder.' };
   }
 }

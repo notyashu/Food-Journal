@@ -9,36 +9,40 @@ import type { LogEvent, UserProfile } from '@/lib/types';
 import { BellRing } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth to get current user details
 
 interface ReminderButtonProps {
   lastFoodIntakeEvent: LogEvent | undefined;
 }
 
 export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
+  const { user, userProfile } = useAuth(); // Get current user info
   const [loading, setLoading] = useState(false);
-  // State now only needs to track the number string or null (if profile fetch fails/missing)
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  // State to track target user's FCM token and display name
+  const [targetUserInfo, setTargetUserInfo] = useState<{ fcmToken: string | null; displayName: string | null }>({ fcmToken: null, displayName: null });
   const { toast } = useToast();
 
   useEffect(() => {
-    const fetchPhoneNumber = async () => {
-        setPhoneNumber(null); // Reset on event change
+    const fetchTargetUserInfo = async () => {
+        setTargetUserInfo({ fcmToken: null, displayName: null }); // Reset on event change
         if (lastFoodIntakeEvent?.userId) {
-            setLoading(true); // Indicate loading while fetching phone number
+            setLoading(true); // Indicate loading while fetching target user info
             try {
                 const userDocRef = doc(db, 'users', lastFoodIntakeEvent.userId);
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     const profile = userDocSnap.data() as UserProfile;
-                    // phoneNumber is now guaranteed on the profile type if it exists
-                    setPhoneNumber(profile.phoneNumber);
+                    setTargetUserInfo({
+                        fcmToken: profile.fcmToken || null, // Get FCM token or null
+                        displayName: profile.displayName || null, // Get display name
+                    });
                 } else {
                     console.warn(`User profile not found for ID: ${lastFoodIntakeEvent.userId}`);
-                    setPhoneNumber(null); // User profile doesn't exist
+                    setTargetUserInfo({ fcmToken: null, displayName: null }); // User profile doesn't exist
                 }
             } catch (error) {
-                console.error("Error fetching user's phone number:", error);
-                setPhoneNumber(null); // Error occurred
+                console.error("Error fetching target user's info:", error);
+                setTargetUserInfo({ fcmToken: null, displayName: null }); // Error occurred
                  toast({
                     title: 'Error',
                     description: 'Could not fetch user details for reminder.',
@@ -48,38 +52,42 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
                  setLoading(false);
             }
         } else {
-             setPhoneNumber(null); // No user ID associated with the event
+             setTargetUserInfo({ fcmToken: null, displayName: null }); // No user ID associated with the event
         }
     };
 
-    fetchPhoneNumber();
+    fetchTargetUserInfo();
   }, [lastFoodIntakeEvent, toast]); // Re-run when the last event changes
 
   const handleSendReminder = async () => {
-    if (!phoneNumber) {
+    // Ensure we have the necessary info for both target and actor
+    if (!lastFoodIntakeEvent?.userId || !targetUserInfo.fcmToken) {
       toast({
         title: 'Cannot Send Reminder',
-        // Simplified message as the number should exist if the profile was fetched
-        description: 'Could not retrieve the phone number for the last person who ate.',
+        description: 'Target user info or FCM token is missing.',
         variant: 'warning',
       });
       return;
     }
-
-     // Optional: Add more robust phone number validation if needed
-     const isLikelyPhoneNumber = /^\+?[0-9\s-()]+$/.test(phoneNumber);
-     if (!isLikelyPhoneNumber) {
-         toast({
-            title: 'Invalid Phone Number Format',
-            description: 'The stored phone number format appears invalid.',
-            variant: 'destructive',
+    if (!user || !userProfile || !userProfile.groupId) {
+        toast({
+            title: 'Cannot Send Reminder',
+            description: 'Your user information or group ID is missing. Please log in again.',
+            variant: 'warning',
         });
         return;
-     }
+    }
 
 
     setLoading(true);
-    const result = await sendReminderAction(phoneNumber); // Pass the fetched phone number
+    const result = await sendReminderAction(
+        lastFoodIntakeEvent.userId,       // targetUserId
+        targetUserInfo.displayName ?? undefined, // targetUserName
+        targetUserInfo.fcmToken,          // targetFcmToken
+        user.uid,                         // actorUserId
+        userProfile.displayName ?? user.email ?? undefined, // actorUserName
+        userProfile.groupId               // groupId
+    );
     setLoading(false);
 
     if (result.success) {
@@ -98,8 +106,8 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
   };
 
   // Determine if the button should be enabled
-  // Enable if not loading and phone number is a non-empty string
-  const canSendReminder = !loading && typeof phoneNumber === 'string' && phoneNumber.length > 0;
+  // Enable if not loading and target user's FCM token is available
+  const canSendReminder = !loading && !!targetUserInfo.fcmToken && !!user && !!userProfile?.groupId;
 
   return (
     <Button
@@ -109,10 +117,10 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
       className="border-accent text-accent hover:bg-accent/10"
       aria-busy={loading}
       aria-live="polite"
-      aria-label="Send WhatsApp reminder to last person who ate"
+      aria-label="Send reminder notification to last person who ate"
     >
       {loading ? (
-        'Loading User...' // Covers both fetching number and sending reminder
+        'Processing...' // Covers both fetching info and sending reminder
       ) : (
         <>
          <BellRing className="mr-2 h-4 w-4" /> Send Fridge Reminder
@@ -121,4 +129,3 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
     </Button>
   );
 }
-
