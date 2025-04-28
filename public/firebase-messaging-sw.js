@@ -4,14 +4,25 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
 // Initialize the Firebase app in the service worker by passing the generated config
+console.log(
+  `Firebase config variables defined in service worker:`,
+  `API_KEY: ${typeof process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== 'undefined'}`,
+  `AUTH_DOMAIN: ${typeof process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN !== 'undefined'}`,
+  `PROJECT_ID: ${typeof process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID !== 'undefined'}`,
+  `STORAGE_BUCKET: ${typeof process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET !== 'undefined'}`,
+  `MESSAGING_SENDER_ID: ${typeof process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID !== 'undefined'}`,
+  `APP_ID: ${typeof process.env.NEXT_PUBLIC_FIREBASE_APP_ID !== 'undefined'}`,
+  `MEASUREMENT_ID: ${typeof process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID !== 'undefined'}`
+);
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY", // Replace with your actual config values
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID" // Optional
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // Retrieve firebase messaging
