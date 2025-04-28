@@ -4,7 +4,7 @@
 import type { LogEvent } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Utensils, Refrigerator, MessageSquareText } from 'lucide-react'; // Added MessageSquareText for notifications
+import { Utensils, Refrigerator } from 'lucide-react'; // Removed MessageSquareText icon
 import { format } from 'date-fns';
 import type { Timestamp } from 'firebase/firestore'; // Import Timestamp
 
@@ -54,19 +54,11 @@ export function EventHistory({ events }: EventHistoryProps) {
                      {event.userName && <span className="text-xs text-muted-foreground">(by {event.userName})</span>}
                 </>
             );
-        case 'NOTIFICATION_SENT':
-             return (
-                <>
-                    <MessageSquareText className="h-5 w-5 text-purple-500" aria-label="Notification Sent Icon" />
-                    <span className="font-medium">Reminder Sent</span>
-                    {event.userName && <span className="text-xs text-muted-foreground">(by {event.userName})</span>}
-                    {event.targetUserName && <span className="text-xs text-muted-foreground ml-1">to {event.targetUserName} ({event.notificationType || 'Notification'})</span>}
-                </>
-            );
+        // Removed 'NOTIFICATION_SENT' case
         default:
             // Handle unknown event types gracefully
              const unknownEvent: never = event.type; // Type checking ensures all types are handled
-            return <span className="font-medium">Unknown Event</span>;
+            return <span className="font-medium">Unknown Event Type: {unknownEvent}</span>;
     }
   };
 
@@ -105,3 +97,4 @@ export function EventHistory({ events }: EventHistoryProps) {
     </Card>
   );
 }
+

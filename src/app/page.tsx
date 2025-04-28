@@ -6,13 +6,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { LogButtons } from '@/components/food-journal/LogButtons';
 import { EventHistory } from '@/components/food-journal/EventHistory';
-import { ReminderButton } from '@/components/food-journal/ReminderButton';
+// ReminderButton import removed
 import type { LogEvent } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { db, app as firebaseApp } from '@/lib/firebase'; // Import client app instance
-import { collection, addDoc, query, where, orderBy, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Link from 'next/link';
@@ -27,7 +27,7 @@ export default function Home() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
    const { toast } = useToast(); // Initialize toast
 
-   // --- FCM Initialization Effect ---
+   // --- FCM Initialization Effect (kept for potential future use, but not currently triggering reminders) ---
    useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user && userProfile && firebaseApp) {
         // Check if Notification permission is granted
@@ -52,7 +52,7 @@ export default function Home() {
                         // Potentially show a button or message asking the user to enable notifications
                          toast({
                             title: "Enable Notifications",
-                            description: "Please allow notifications to receive reminders.",
+                            description: "Please allow notifications if you'd like to receive them in the future.",
                             variant: "default", // or "warning"
                          });
                     }
@@ -84,7 +84,7 @@ export default function Home() {
              console.log("Notification permission denied.");
               toast({
                   title: "Notifications Blocked",
-                  description: "Reminders are disabled. Please enable notifications in your browser settings.",
+                  description: "Push notifications are disabled. Please enable notifications in your browser settings if needed.",
                   variant: "warning",
               });
         }
@@ -167,6 +167,19 @@ export default function Home() {
       // Firestore listener will automatically update the UI, no need to manually setEvents
       console.log("Event logged successfully");
        // Toast moved to LogButtons for immediate feedback
+
+        // --- OneSignal/Alternative Reminder Logic ---
+        // If the event type is 'FOOD_INTAKE', potentially trigger OneSignal Journey or schedule local notification
+        if (eventWithUserDetails.type === 'FOOD_INTAKE') {
+            console.log("FOOD_INTAKE event logged. Triggering reminder logic (not implemented yet).");
+            // TODO: Implement OneSignal Journey trigger API call OR
+            // TODO: Implement client-side local notification scheduling
+            // Example (Conceptual - requires 'node-schedule' or similar on backend/serverless function for reliability):
+            // scheduleReminder(user.uid, userProfile.groupId); // Pass necessary info
+            // Example (Conceptual - client-side local notification):
+            // scheduleLocalNotification();
+        }
+
     } catch (error) {
       console.error('Failed to log event:', error);
        toast({ title: "Error", description: "Failed to save the event.", variant: "destructive" });
@@ -188,10 +201,7 @@ export default function Home() {
   };
 
 
-  // Find the latest food intake event *for the current group*
- const lastFoodIntakeEvent = events
-    .filter(event => event.type === 'FOOD_INTAKE' && event.userId) // userId should always exist now
-    .sort((a, b) => (getDateFromTimestamp(b.timestamp)).getTime() - (getDateFromTimestamp(a.timestamp)).getTime())[0]; // Ensure timestamps are Dates for comparison
+  // Calculation of lastFoodIntakeEvent removed as it's no longer used for the ReminderButton
 
 
   // Don't render anything substantial until loading is complete and user is verified
@@ -204,8 +214,9 @@ export default function Home() {
                  <CardContent className="p-6 space-y-6">
                      <div className="h-10 bg-muted rounded animate-pulse w-1/2 mx-auto"></div>
                      <Separator />
-                     <div className="h-10 bg-muted rounded animate-pulse w-1/3 ml-auto"></div>
-                      <Separator />
+                     {/* Removed reminder section skeleton */}
+                     {/* <div className="h-10 bg-muted rounded animate-pulse w-1/3 ml-auto"></div> */}
+                     {/* <Separator /> */}
                      <div className="space-y-3 h-[400px] overflow-hidden">
                          <div className="h-12 bg-secondary rounded animate-pulse"></div>
                          <div className="h-12 bg-secondary rounded animate-pulse"></div>
@@ -272,38 +283,9 @@ export default function Home() {
 
           <Separator />
 
-           <div className="space-y-4">
-             <div className="flex justify-between items-center flex-wrap gap-2">
-                 <h2 className="text-lg font-semibold text-foreground">Need to Remind?</h2>
-                  {/* ReminderButton now handles FCM */}
-                 <ReminderButton lastFoodIntakeEvent={lastFoodIntakeEvent} />
-             </div>
-            <p className="text-sm text-muted-foreground">
-                {/* Updated description for FCM */}
-               Send an in-app notification reminder to the last person who logged eating (if they have notifications enabled).
-            </p>
-             {Notification.permission !== 'granted' && (
-                 <Button
-                     variant="outline"
-                     size="sm"
-                     onClick={() => {
-                         Notification.requestPermission().then(permission => {
-                             if (permission === 'granted') {
-                                 toast({ title: "Notifications Enabled", description: "You can now receive reminders." });
-                                 // Optionally trigger FCM token refresh here if needed
-                             } else {
-                                 toast({ title: "Notifications Blocked", description: "Reminders remain disabled.", variant: "warning" });
-                             }
-                         });
-                     }}
-                     >
-                     Request Notification Permission
-                 </Button>
-             )}
-          </div>
-
-
-          <Separator />
+           {/* Reminder Section Removed */}
+           {/* <div className="space-y-4"> ... </div> */}
+           {/* <Separator /> */}
 
           <div className="space-y-4">
              {isLoadingEvents ? (

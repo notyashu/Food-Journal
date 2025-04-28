@@ -18,15 +18,11 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  // Removed phoneNumber state
-  // const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
-  // Removed phone number validation
-  // const isValidPhoneNumber = (num: string) => /^\+?[0-9\s-()]{7,}$/.test(num);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,10 +39,6 @@ export default function SignupPage() {
         setLoading(false);
         return;
     }
-
-    // Removed phone number checks
-    // if (!phoneNumber.trim()) { ... }
-    // if (!isValidPhoneNumber(phoneNumber)) { ... }
 
 
     if (password.length < 6) {
@@ -66,16 +58,15 @@ export default function SignupPage() {
       const user = userCredential.user;
 
       // 2. Update Firebase Auth profile
-      await updateProfile(user, { displayName: displayName });
+      await updateProfile(user, { displayName: displayName.trim() });
 
       // 3. Create user profile document in Firestore
       const userDocRef = doc(db, 'users', user.uid);
        // New users start without a group, role 'member', and no FCM token yet
-      const newUserProfile: UserProfile = {
+      const newUserProfile: Omit<UserProfile, 'phoneNumber'> = { // Ensure phoneNumber is not included
           uid: user.uid,
           email: user.email,
           displayName: displayName.trim(),
-          phoneNumber: '', // Set phone number to empty string or null if field still exists
           fcmToken: null, // Initialize fcmToken as null
           groupId: null,
           role: 'member',
@@ -135,11 +126,7 @@ export default function SignupPage() {
                 disabled={loading}
               />
             </div>
-             {/* Removed Phone Number Input Field */}
-             {/* <div>
-              <Label htmlFor="phoneNumber">WhatsApp Number</Label>
-              <Input ... />
-            </div> */}
+            {/* Phone Number Input Field Removed */}
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
@@ -182,3 +169,4 @@ export default function SignupPage() {
     </main>
   );
 }
+
