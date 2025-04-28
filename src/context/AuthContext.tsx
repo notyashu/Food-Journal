@@ -5,7 +5,8 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/lib/types';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
+// Skeleton import is removed as the loading state here is removed
+// import { Skeleton } from '@/components/ui/skeleton';
 
 interface AuthContextProps {
   user: FirebaseUser | null;
@@ -24,11 +25,13 @@ const AuthContext = createContext<AuthContextProps>({
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Initialize loading to true
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
+      // Keep setLoading(true) at the beginning if you want immediate feedback
+      // setLoading(true); // Optional: Uncomment if you want loading=true during the async check
+
       setUser(firebaseUser);
       if (firebaseUser) {
         // Fetch user profile from Firestore
@@ -38,19 +41,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (userDocSnap.exists()) {
                 setUserProfile(userDocSnap.data() as UserProfile);
             } else {
-                // Handle case where user exists in Auth but not Firestore (e.g., profile creation pending)
+                // Handle case where user exists in Auth but not Firestore
                 setUserProfile(null);
                  console.warn(`User profile not found in Firestore for UID: ${firebaseUser.uid}`);
-                 // Optionally trigger profile creation flow here
             }
         } catch (error) {
             console.error("Error fetching user profile:", error);
             setUserProfile(null); // Ensure profile is null on error
         }
-
       } else {
         setUserProfile(null);
       }
+      // Set loading to false only after all checks/fetches are complete
       setLoading(false);
     });
 
@@ -60,19 +62,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
    const isAdmin = userProfile?.role === 'admin';
 
-  // Show a loading indicator while checking auth state
-  if (loading && typeof window !== 'undefined') {
-      return (
-          <div className="flex items-center justify-center min-h-screen bg-background">
-              <div className="space-y-4 p-8 rounded-lg shadow-lg bg-card w-full max-w-md">
-                  <Skeleton className="h-8 w-3/4 mx-auto" />
-                  <Skeleton className="h-4 w-1/2 mx-auto" />
-                  <Skeleton className="h-10 w-full mt-6" />
-              </div>
-          </div>
-      );
-  }
-
+  // Remove the conditional rendering block that caused hydration issues.
+  // Child components should use the `loading` state from the context
+  // to determine their own rendering (e.g., show skeletons, redirect).
+  // if (loading && typeof window !== 'undefined') { ... } // REMOVED
 
   return (
     <AuthContext.Provider value={{ user, userProfile, loading, isAdmin }}>
