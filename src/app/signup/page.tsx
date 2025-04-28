@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -17,15 +18,53 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState(''); // Added WhatsApp Number state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
+  // Basic phone number validation (adjust regex as needed for desired format)
+  const isValidPhoneNumber = (num: string) => /^\+?[0-9\s-()]{7,}$/.test(num);
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (!displayName.trim()) {
+        setError("Display Name is required.");
+        toast({
+            title: "Signup Failed",
+            description: "Please enter your display name.",
+            variant: "destructive",
+        });
+        setLoading(false);
+        return;
+    }
+
+    if (!phoneNumber.trim()) {
+        setError("WhatsApp Number is required.");
+        toast({
+            title: "Signup Failed",
+            description: "Please enter your WhatsApp number.",
+            variant: "destructive",
+        });
+        setLoading(false);
+        return;
+    }
+
+     if (!isValidPhoneNumber(phoneNumber)) {
+         setError("Please enter a valid phone number (e.g., +1234567890).");
+         toast({
+             title: "Signup Failed",
+             description: "Please enter a valid phone number.",
+             variant: "destructive",
+         });
+         setLoading(false);
+         return;
+     }
+
 
     if (password.length < 6) {
         setError("Password should be at least 6 characters long.");
@@ -51,9 +90,9 @@ export default function SignupPage() {
        // New users start without a group and as 'member' role
       const newUserProfile: UserProfile = {
           uid: user.uid,
-          email: user.email,
-          displayName: displayName || user.email, // Use display name or fallback to email
-          phoneNumber: user.phoneNumber || undefined, // Include phone if available from Auth (though typically not on signup)
+          email: user.email, // Still store email from auth
+          displayName: displayName.trim(), // Save trimmed display name
+          phoneNumber: phoneNumber.trim(), // Save trimmed phone number
           groupId: null, // Start without a group
           role: 'member', // Default role
           createdAt: Timestamp.now()
@@ -98,13 +137,26 @@ export default function SignupPage() {
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
             <div>
-              <Label htmlFor="displayName">Display Name (Optional)</Label>
+              <Label htmlFor="displayName">Display Name</Label>
               <Input
                 id="displayName"
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Your Name"
+                required // Make required
+                disabled={loading}
+              />
+            </div>
+             <div>
+              <Label htmlFor="phoneNumber">WhatsApp Number</Label>
+              <Input
+                id="phoneNumber"
+                type="tel" // Use 'tel' type for phone numbers
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                required // Make required
+                placeholder="+1 123 456 7890"
                 disabled={loading}
               />
             </div>

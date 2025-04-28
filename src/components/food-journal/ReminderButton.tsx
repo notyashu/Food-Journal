@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { sendReminderAction } from '@/app/actions'; // Assuming this action is still relevant
+import { sendReminderAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { LogEvent, UserProfile } from '@/lib/types';
 import { BellRing } from 'lucide-react';
@@ -15,12 +16,13 @@ interface ReminderButtonProps {
 
 export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
   const [loading, setLoading] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState<string | null | undefined>(undefined); // undefined initially, null if no number found, string if found
+  // State now only needs to track the number string or null (if profile fetch fails/missing)
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     const fetchPhoneNumber = async () => {
-        setPhoneNumber(undefined); // Reset on event change
+        setPhoneNumber(null); // Reset on event change
         if (lastFoodIntakeEvent?.userId) {
             setLoading(true); // Indicate loading while fetching phone number
             try {
@@ -28,7 +30,8 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     const profile = userDocSnap.data() as UserProfile;
-                    setPhoneNumber(profile.phoneNumber || null); // Set to null if phoneNumber field is missing or empty
+                    // phoneNumber is now guaranteed on the profile type if it exists
+                    setPhoneNumber(profile.phoneNumber);
                 } else {
                     console.warn(`User profile not found for ID: ${lastFoodIntakeEvent.userId}`);
                     setPhoneNumber(null); // User profile doesn't exist
@@ -56,8 +59,9 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
     if (!phoneNumber) {
       toast({
         title: 'Cannot Send Reminder',
-        description: phoneNumber === undefined ? 'Checking user details...' : 'The last person who ate does not have a phone number set in their profile or could not be found.',
-        variant: 'warning', // Use warning as it might not be an error state
+        // Simplified message as the number should exist if the profile was fetched
+        description: 'Could not retrieve the phone number for the last person who ate.',
+        variant: 'warning',
       });
       return;
     }
@@ -66,8 +70,8 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
      const isLikelyPhoneNumber = /^\+?[0-9\s-()]+$/.test(phoneNumber);
      if (!isLikelyPhoneNumber) {
          toast({
-            title: 'Invalid Phone Number',
-            description: 'The stored phone number format is invalid.',
+            title: 'Invalid Phone Number Format',
+            description: 'The stored phone number format appears invalid.',
             variant: 'destructive',
         });
         return;
@@ -94,7 +98,7 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
   };
 
   // Determine if the button should be enabled
-  // Enable if not loading, and phone number is fetched and is a non-empty string
+  // Enable if not loading and phone number is a non-empty string
   const canSendReminder = !loading && typeof phoneNumber === 'string' && phoneNumber.length > 0;
 
   return (
@@ -108,7 +112,7 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
       aria-label="Send WhatsApp reminder to last person who ate"
     >
       {loading ? (
-        'Loading...' // Covers both fetching number and sending reminder
+        'Loading User...' // Covers both fetching number and sending reminder
       ) : (
         <>
          <BellRing className="mr-2 h-4 w-4" /> Send Fridge Reminder
@@ -117,3 +121,4 @@ export function ReminderButton({ lastFoodIntakeEvent }: ReminderButtonProps) {
     </Button>
   );
 }
+
