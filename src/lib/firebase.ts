@@ -24,9 +24,9 @@ const essentialKeys: (keyof typeof configValues)[] = [
     'apiKey',
     'authDomain',
     'projectId',
-    'storageBucket',
-    'messagingSenderId',
-    'appId',
+    // storageBucket is often optional, but good to check
+    // messagingSenderId is required for FCM
+    // appId is usually required
 ];
 
 let missingKeys = false;
@@ -34,24 +34,28 @@ essentialKeys.forEach((key) => {
     if (!configValues[key]) {
         console.warn(`
     ***************************************************************************
-    * WARNING: Firebase config key "${key}" is missing!                       *
-    * Ensure NEXT_PUBLIC_FIREBASE_${key.toUpperCase()} is set in your .env file.        *
+    * WARNING: Firebase config key "${key}" is potentially missing!           *
+    * Ensure NEXT_PUBLIC_FIREBASE_${key.toUpperCase()} is set in your .env file *
+    * if you intend to use features requiring it (e.g., Auth, Firestore).   *
     ***************************************************************************
         `);
-        missingKeys = true;
+        missingKeys = true; // Mark that some keys might be missing
     }
 });
 
-if (missingKeys) {
+// Check specifically for Auth-related keys if Auth is intended to be used
+if (!configValues.apiKey || !configValues.authDomain) {
      console.error(`
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! ERROR: Critical Firebase configuration is missing.                      !
-    ! The application will likely fail to connect to Firebase services.       !
+    ! ERROR: Critical Firebase Auth configuration (apiKey, authDomain) missing!
+    ! Firebase Authentication will likely fail.                               !
     ! Please check your .env file and ensure all required                     !
     ! NEXT_PUBLIC_FIREBASE_* variables are correctly set.                     !
     ! Also, ensure Email/Password sign-in is enabled in Firebase Console.     !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     `);
+     // Optionally throw an error here if Auth is absolutely critical and cannot proceed without it
+     // throw new Error("Missing critical Firebase Auth configuration.");
 }
 
 
@@ -67,31 +71,39 @@ const firebaseConfig = {
 
 // Initialize Firebase
 let app: FirebaseApp;
-if (!getApps().length) {
-  // Check if config has essential keys before initializing
-  if (!missingKeys) {
-       try {
-           app = initializeApp(firebaseConfig);
-       } catch (error) {
-           console.error("Firebase initialization failed:", error);
-           // Handle initialization error, maybe show a message to the user
-           // or prevent the app from loading further depending on severity.
-           // For now, we'll let the app continue but Firebase features might not work.
-           // A more robust solution might involve a state to indicate Firebase is unavailable.
-       }
-  } else {
-       console.error("Firebase initialization skipped due to missing configuration.");
-  }
-} else {
-  app = getApp();
+let auth: Auth;
+let db: Firestore;
+
+try {
+    if (!getApps().length) {
+        app = initializeApp(firebaseConfig);
+    } else {
+        app = getApp();
+    }
+
+    // Initialize Auth and Firestore - these will throw errors if config is invalid/missing
+    auth = getAuth(app);
+    db = getFirestore(app);
+
+} catch (error) {
+    console.error("Firebase initialization failed:", error);
+    console.error(`
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Critical Firebase Initialization Error!                                 !
+    ! The application failed to initialize Firebase services.                 !
+    ! - Verify Firebase configuration in your .env file.                      !
+    ! - Check Firebase Console for project status and enabled services.       !
+    ! - Ensure network connectivity to Firebase services.                     !
+    ! Application functionality depending on Firebase will be broken.         !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    `);
+    // Re-throw the error or handle it gracefully depending on app requirements
+    // For now, provide dummy objects to prevent further crashes, but log the error.
+    // Note: Firebase features will NOT work in this state.
+    app = {} as FirebaseApp; // Provide a dummy object
+    auth = {} as Auth;       // Provide a dummy object
+    db = {} as Firestore;    // Provide a dummy object
+    // throw error; // Or re-throw if the app cannot function without Firebase
 }
 
-// Initialize Auth and Firestore conditionally
-// @ts-ignore app might be uninitialized if config is missing
-const auth: Auth = app ? getAuth(app) : ({} as Auth);
-// @ts-ignore app might be uninitialized if config is missing
-const db: Firestore = app ? getFirestore(app) : ({} as Firestore);
-
-
 export { app, auth, db };
-

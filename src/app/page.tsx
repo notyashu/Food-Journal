@@ -11,12 +11,12 @@ import type { LogEvent } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { db, app as firebaseApp } from '@/lib/firebase'; // Import client app instance
-import { collection, addDoc, query, orderBy, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase'; // Keep db import
+import { collection, addDoc, query, orderBy, onSnapshot, Timestamp, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'; // Import specific types
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Link from 'next/link';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging'; // Import FCM functions
+// FCM imports removed: getMessaging, getToken, onMessage, app as firebaseApp
 import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 
@@ -27,74 +27,7 @@ export default function Home() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
    const { toast } = useToast(); // Initialize toast
 
-   // --- FCM Initialization Effect (kept for potential future use, but not currently triggering reminders) ---
-   useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user && userProfile && firebaseApp) {
-        // Check if Notification permission is granted
-        if (Notification.permission === 'granted') {
-             const messaging = getMessaging(firebaseApp);
-
-            // Request FCM token
-            getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY }) // Replace with your VAPID key env variable
-                .then((currentToken) => {
-                    if (currentToken) {
-                        console.log('FCM Token:', currentToken);
-                        // Check if token needs to be updated in Firestore
-                        if (userProfile.fcmToken !== currentToken) {
-                            const userDocRef = doc(db, 'users', user.uid);
-                            updateDoc(userDocRef, { fcmToken: currentToken })
-                                .then(() => console.log('FCM token updated in Firestore.'))
-                                .catch((err) => console.error('Error updating FCM token:', err));
-                        }
-                    } else {
-                        // Show permission request UI
-                        console.log('No registration token available. Request permission to generate one.');
-                        // Potentially show a button or message asking the user to enable notifications
-                         toast({
-                            title: "Enable Notifications",
-                            description: "Please allow notifications if you'd like to receive them in the future.",
-                            variant: "default", // or "warning"
-                         });
-                    }
-                }).catch((err) => {
-                    console.error('An error occurred while retrieving token. ', err);
-                    // Handle errors like no service worker, etc.
-                     toast({
-                        title: "Notification Error",
-                        description: "Could not get permission for notifications.",
-                        variant: "destructive",
-                    });
-                });
-
-            // Handle foreground messages (optional)
-            onMessage(messaging, (payload) => {
-                console.log('Message received in foreground. ', payload);
-                 // Show a toast or update UI based on the message
-                toast({
-                    title: payload.notification?.title || 'Notification',
-                    description: payload.notification?.body || '',
-                });
-            });
-
-        } else if (Notification.permission === 'default') {
-            console.log("Notification permission not yet requested.");
-            // Consider prompting the user later or via a button click
-             // Example: show a button to request permission
-        } else {
-             console.log("Notification permission denied.");
-              toast({
-                  title: "Notifications Blocked",
-                  description: "Push notifications are disabled. Please enable notifications in your browser settings if needed.",
-                  variant: "warning",
-              });
-        }
-    } else if (user && !userProfile) {
-         console.log("User profile still loading or not available for FCM setup.");
-    } else if (!user) {
-         console.log("User not logged in, skipping FCM setup.");
-    }
-
-   }, [user, userProfile, firebaseApp, toast]); // Rerun when user or profile changes
+   // --- FCM Initialization Effect Removed ---
 
 
   useEffect(() => {
@@ -104,85 +37,109 @@ export default function Home() {
       return; // Stop further execution in this render cycle
     }
 
+    let unsubscribe = () => {}; // Initialize unsubscribe to an empty function
+
     // If user is authenticated and has a group ID, fetch events
     if (user && userProfile?.groupId) {
       setIsLoadingEvents(true);
-      const eventsColRef = collection(db, 'groups', userProfile.groupId, 'events');
-      const q = query(eventsColRef, orderBy('timestamp', 'desc'));
+      try {
+        const eventsColRef = collection(db, 'groups', userProfile.groupId, 'events');
+        const q = query(eventsColRef, orderBy('timestamp', 'desc'));
 
-      const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const fetchedEvents: LogEvent[] = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            // Ensure timestamp is converted to Date object
-            const timestamp = (data.timestamp as Timestamp)?.toDate ? (data.timestamp as Timestamp).toDate() : new Date();
-            fetchedEvents.push({
-                id: doc.id,
-                ...data,
-                timestamp: timestamp, // Use the converted Date object
-            } as LogEvent); // Type assertion
+        unsubscribe = onSnapshot(q, (querySnapshot) => {
+          const fetchedEvents: LogEvent[] = [];
+          querySnapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => { // Add type annotation
+              const data = doc.data();
+              // Basic validation of fetched data
+              if (!data || typeof data !== 'object' || !data.type || !data.timestamp || !data.userId || !data.groupId) {
+                  console.warn("Skipping invalid event data from Firestore:", doc.id, data);
+                  return; // Skip this document
+              }
+
+              // Ensure timestamp is converted to Date object
+              const timestamp = getDateFromTimestamp(data.timestamp); // Use helper function
+              fetchedEvents.push({
+                  id: doc.id,
+                  type: data.type,
+                  timestamp: timestamp, // Use the converted Date object
+                  userId: data.userId,
+                  userName: data.userName || 'Unknown User',
+                  groupId: data.groupId,
+                  // Spread any other potential fields if needed, or explicitly map them
+                  // ...data, // Use explicit mapping instead of spread for better type safety
+              } as LogEvent); // Type assertion (ensure all required fields are present)
+          });
+          setEvents(fetchedEvents);
+          setIsLoadingEvents(false);
+        }, (error) => {
+          console.error(`Error fetching events via snapshot listener for group ${userProfile.groupId}: `, error);
+          setIsLoadingEvents(false);
+           toast({ title: "Error Loading History", description: "Could not load event history in real-time. Please refresh.", variant: "destructive" });
         });
-        setEvents(fetchedEvents);
-        setIsLoadingEvents(false);
-      }, (error) => {
-        console.error("Error fetching events: ", error);
-        setIsLoadingEvents(false);
-         toast({ title: "Error", description: "Could not load event history.", variant: "destructive" });
-      });
+      } catch (error) {
+          console.error("Error setting up Firestore listener:", error);
+          setIsLoadingEvents(false);
+          toast({ title: "Setup Error", description: "Failed to set up event listener.", variant: "destructive" });
+      }
 
-      // Cleanup listener on unmount
-      return () => unsubscribe();
     } else if (!loading && user && !userProfile?.groupId) {
         // Handle case where user is logged in but has no group assigned yet
-        console.log("User logged in but no group assigned.");
+        console.log("User logged in but no group assigned. Clearing events and stopping load.");
         setIsLoadingEvents(false); // Stop loading indicator
         setEvents([]); // Clear events
     } else if (!loading && !user) {
         // Ensure loading is false and clear events if user logs out
+        console.log("User logged out or loading finished without user. Clearing events.");
         setIsLoadingEvents(false);
         setEvents([]);
     }
 
-  }, [user, userProfile, loading, router, toast]);
+    // Cleanup listener on unmount or when dependencies change
+    return () => {
+        console.log("Cleaning up Firestore listener.");
+        unsubscribe();
+    };
+
+  }, [user, userProfile?.groupId, loading, router, toast]); // Depend specifically on groupId
 
 
-  const handleLogEvent = async (newEventData: Omit<LogEvent, 'id' | 'groupId' | 'userId' | 'userName'>) => {
-    if (!user || !userProfile?.groupId) {
-      console.error("User not authenticated or no group ID found");
-      toast({ title: "Error", description: "Cannot log event. Please log in.", variant: "destructive" });
+  const handleLogEvent = async (newEventData: Pick<LogEvent, 'type' | 'timestamp'>) => {
+    if (!user || !userProfile?.groupId || !userProfile) { // Add null check for userProfile
+      console.error("User not authenticated, profile incomplete, or no group ID found");
+      toast({ title: "Error", description: "Cannot log event. Ensure you are logged in and assigned to a group.", variant: "destructive" });
       return;
     }
 
+    // Ensure timestamp is Firestore Timestamp before saving
+    const timestampToSave = newEventData.timestamp instanceof Date
+        ? Timestamp.fromDate(newEventData.timestamp)
+        : newEventData.timestamp; // Assume it's already a Timestamp if not a Date
+
+
     const eventWithUserDetails: Omit<LogEvent, 'id'> = {
-        ...newEventData,
-        timestamp: Timestamp.fromDate(new Date()), // Use Firestore Timestamp for consistency
+        type: newEventData.type,
+        timestamp: timestampToSave, // Use Firestore Timestamp for consistency
         userId: user.uid,
         userName: userProfile.displayName || user.email || 'Unknown User', // Get name from profile or fallback
         groupId: userProfile.groupId,
     };
 
+
     try {
       const eventsColRef = collection(db, 'groups', userProfile.groupId, 'events');
-      await addDoc(eventsColRef, eventWithUserDetails);
-      // Firestore listener will automatically update the UI, no need to manually setEvents
-      console.log("Event logged successfully");
+      const docRef = await addDoc(eventsColRef, eventWithUserDetails);
+      console.log(`Event logged successfully with ID: ${docRef.id}`);
        // Toast moved to LogButtons for immediate feedback
 
         // --- OneSignal/Alternative Reminder Logic ---
-        // If the event type is 'FOOD_INTAKE', potentially trigger OneSignal Journey or schedule local notification
         if (eventWithUserDetails.type === 'FOOD_INTAKE') {
-            console.log("FOOD_INTAKE event logged. Triggering reminder logic (not implemented yet).");
-            // TODO: Implement OneSignal Journey trigger API call OR
-            // TODO: Implement client-side local notification scheduling
-            // Example (Conceptual - requires 'node-schedule' or similar on backend/serverless function for reliability):
-            // scheduleReminder(user.uid, userProfile.groupId); // Pass necessary info
-            // Example (Conceptual - client-side local notification):
-            // scheduleLocalNotification();
+            console.log("FOOD_INTAKE event logged. Reminder logic placeholder.");
+            // TODO: Implement OneSignal Journey trigger API call OR client-side local notification
         }
 
     } catch (error) {
-      console.error('Failed to log event:', error);
-       toast({ title: "Error", description: "Failed to save the event.", variant: "destructive" });
+      console.error(`Failed to log event for user ${user.uid} in group ${userProfile.groupId}:`, error);
+       toast({ title: "Error Saving Event", description: "Failed to save the event. Please try again.", variant: "destructive" });
     }
   };
 
@@ -201,12 +158,11 @@ export default function Home() {
   };
 
 
-  // Calculation of lastFoodIntakeEvent removed as it's no longer used for the ReminderButton
+  // Calculation of lastFoodIntakeEvent removed
 
 
-  // Don't render anything substantial until loading is complete and user is verified
+   // Don't render anything substantial until loading is complete and user is verified
    if (loading) {
-       // You might want a more integrated loading skeleton here matching the card layout
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8 md:p-12 lg:p-24 bg-background">
             <Card className="w-full max-w-3xl shadow-xl rounded-lg overflow-hidden">
@@ -215,7 +171,6 @@ export default function Home() {
                      <div className="h-10 bg-muted rounded animate-pulse w-1/2 mx-auto"></div>
                      <Separator />
                      {/* Removed reminder section skeleton */}
-                     {/* <div className="h-10 bg-muted rounded animate-pulse w-1/3 ml-auto"></div> */}
                      {/* <Separator /> */}
                      <div className="space-y-3 h-[400px] overflow-hidden">
                          <div className="h-12 bg-secondary rounded animate-pulse"></div>
@@ -239,7 +194,7 @@ export default function Home() {
                    </CardHeader>
                    <CardContent>
                        <p className="text-muted-foreground mb-4">You are logged in but not yet part of a food journal group.</p>
-                       <p className="text-muted-foreground mb-6">Please contact your group admin to add you, or create a group if you are the admin.</p>
+                       <p className="text-muted-foreground mb-6">Please contact your group admin to add you{isAdmin ? ', or go to the admin panel to create/manage your group' : '.'}</p>
                          {isAdmin && ( // Show Admin button only if designated as admin
                            <Link href="/admin" passHref>
                                <Button variant="default" className="mb-2 mr-2">Go to Admin Panel</Button>
@@ -253,7 +208,7 @@ export default function Home() {
   }
 
 
-  // Main authenticated view
+  // Main authenticated view (user has a group)
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8 md:p-12 lg:p-24 bg-background">
       <Card className="w-full max-w-3xl shadow-xl rounded-lg overflow-hidden">
@@ -261,7 +216,8 @@ export default function Home() {
           <div>
               <CardTitle className="text-3xl font-bold">Food Journal</CardTitle>
               <CardDescription className="text-primary-foreground/80 pt-1">
-                Group: {userProfile?.groupName || userProfile?.groupId || 'Loading...'} {/* TODO: Fetch and display group name */}
+                {/* Attempt to show group name if available */}
+                Group: {userProfile?.groupName || `ID: ${userProfile?.groupId}` || 'Loading...'}
               </CardDescription>
           </div>
            <div className="flex items-center gap-2">
@@ -284,14 +240,15 @@ export default function Home() {
           <Separator />
 
            {/* Reminder Section Removed */}
-           {/* <div className="space-y-4"> ... </div> */}
-           {/* <Separator /> */}
 
           <div className="space-y-4">
              {isLoadingEvents ? (
-                <p className="text-center text-muted-foreground">Loading event history...</p>
+                <div className="text-center text-muted-foreground py-4">
+                    <p>Loading event history...</p>
+                    {/* Optional: Add a simple spinner or skeleton */}
+                </div>
               ) : (
-                <EventHistory events={events} />
+                 <EventHistory events={events} />
               )}
           </div>
         </CardContent>
@@ -301,13 +258,31 @@ export default function Home() {
 }
 
 // Helper to convert Firestore Timestamp or Date to Date object
-function getDateFromTimestamp(timestamp: Date | Timestamp | undefined): Date {
-     if (!timestamp) return new Date();
+function getDateFromTimestamp(timestamp: unknown): Date {
+     if (!timestamp) {
+        console.warn("Received null or undefined timestamp, returning current date.");
+        return new Date();
+     }
     if (timestamp instanceof Date) {
         return timestamp;
     }
-    if (timestamp && typeof (timestamp as Timestamp).toDate === 'function') {
+    // Check if it's a Firestore Timestamp (duck typing for safety)
+    if (typeof timestamp === 'object' && timestamp !== null && 'toDate' in timestamp && typeof (timestamp as Timestamp).toDate === 'function') {
         return (timestamp as Timestamp).toDate();
     }
-    return new Date();
+    // Handle potential string or number representations if necessary, though Firestore should send Timestamps
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+        try {
+            const date = new Date(timestamp);
+            if (!isNaN(date.getTime())) {
+                 console.warn("Received string/number timestamp, attempting conversion:", timestamp);
+                return date;
+            }
+        } catch (e) {
+            // Ignore conversion error, proceed to fallback
+        }
+    }
+
+    console.error("Received unexpected timestamp format, returning current date as fallback:", timestamp);
+    return new Date(); // Fallback
 }

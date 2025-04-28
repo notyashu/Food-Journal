@@ -6,7 +6,6 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { UserProfile } from '@/lib/types';
 // Skeleton import is removed as the loading state here is removed
-// import { Skeleton } from '@/components/ui/skeleton';
 
 interface AuthContextProps {
   user: FirebaseUser | null;
@@ -29,9 +28,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // Keep setLoading(true) at the beginning if you want immediate feedback
-      // setLoading(true); // Optional: Uncomment if you want loading=true during the async check
-
       setUser(firebaseUser);
       if (firebaseUser) {
         // Fetch user profile from Firestore
@@ -39,14 +35,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
-                setUserProfile(userDocSnap.data() as UserProfile);
+                const profileData = userDocSnap.data() as UserProfile;
+                 // Basic validation
+                 if (!profileData.uid || !profileData.email) {
+                    console.error("Fetched user profile is missing essential fields (uid or email):", profileData);
+                    setUserProfile(null);
+                 } else {
+                    setUserProfile(profileData);
+                 }
             } else {
-                // Handle case where user exists in Auth but not Firestore
+                // Handle case where user exists in Auth but not Firestore profile doc
                 setUserProfile(null);
-                 console.warn(`User profile not found in Firestore for UID: ${firebaseUser.uid}`);
+                console.warn(`User profile document not found in Firestore for UID: ${firebaseUser.uid}. User might need setup.`);
             }
         } catch (error) {
-            console.error("Error fetching user profile:", error);
+            // Log the specific error during profile fetch
+            console.error(`Error fetching user profile for UID ${firebaseUser.uid}:`, error);
             setUserProfile(null); // Ensure profile is null on error
         }
       } else {
@@ -60,12 +64,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-   const isAdmin = userProfile?.role === 'admin';
+   // Determine admin status based on the fetched profile
+   const isAdmin = !!userProfile && userProfile.role === 'admin';
 
-  // Remove the conditional rendering block that caused hydration issues.
   // Child components should use the `loading` state from the context
   // to determine their own rendering (e.g., show skeletons, redirect).
-  // if (loading && typeof window !== 'undefined') { ... } // REMOVED
 
   return (
     <AuthContext.Provider value={{ user, userProfile, loading, isAdmin }}>
