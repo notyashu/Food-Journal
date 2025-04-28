@@ -1,0 +1,28 @@
+[debug] [2025-04-28T20:00:24.615Z] ----------------------------------------------------------------------
+[debug] [2025-04-28T20:00:24.618Z] Command:       /nix/store/ixbb20farqh1f4fqbmsn6b1ixn8mc8ij-nodejs-20.18.1/bin/node /nix/store/984bjqzf7prsischdc86jmqbn4ha5yxd-firebase-tools-14.2.0/lib/node_modules/firebase-tools/lib/bin/firebase.js init hosting
+[debug] [2025-04-28T20:00:24.619Z] CLI Version:   14.2.0
+[debug] [2025-04-28T20:00:24.619Z] Platform:      linux
+[debug] [2025-04-28T20:00:24.619Z] Node Version:  v20.18.1
+[debug] [2025-04-28T20:00:24.619Z] Time:          Mon Apr 28 2025 20:00:24 GMT+0000 (Coordinated Universal Time)
+[debug] [2025-04-28T20:00:24.620Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-04-28T20:00:24.627Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-04-28T20:00:24.628Z] > authorizing via signed-in user (suryanshmehrotra110@gmail.com)
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /home/user/studio
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] but for now we'll just set up a default project.
+[info] 
