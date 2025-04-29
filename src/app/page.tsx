@@ -145,6 +145,7 @@ export default function Home() {
 
   const handleLogout = async () => {
     try {
+      
       await signOut(auth);
       // Clear local state immediately for faster UI update
       setEvents([]);
