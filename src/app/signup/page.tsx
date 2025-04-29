@@ -67,11 +67,11 @@ export default function SignupPage() {
           await updateProfile(user, { displayName: displayName.trim() });
           console.log("Firebase Auth profile updated successfully.");
       } catch (profileError: any) {
-          console.error("Error updating Firebase Auth profile:", profileError);
+          console.warn("Error updating Firebase Auth profile:", profileError);
           // Non-critical error, log it but continue. Firestore profile is more important.
           toast({
               title: "Profile Update Warning",
-              description: `Could not update Auth profile display name: ${profileError.message}`,
+              description: `Could not update Auth profile display name: ${profileError.message || 'Unknown error'}. Proceeding with Firestore profile creation.`,
               variant: "default", // Not destructive as signup might still succeed partially
           });
       }
@@ -96,8 +96,8 @@ export default function SignupPage() {
           console.log("Firestore user profile document created successfully.");
       } catch (firestoreError: any) {
            console.error("Error creating Firestore user profile document:", firestoreError);
-           // This is a more critical error, inform the user.
-           // Consider deleting the auth user if Firestore creation fails, but this adds complexity.
+           // This is a critical error. We still need to let the finally block handle loading state.
+           // We need to throw the error so it's caught by the outer catch block, which then lets finally run.
            setError(`Failed to save profile data: ${firestoreError.message}. Please contact support.`);
            toast({
                title: "Signup Incomplete",
@@ -105,55 +105,68 @@ export default function SignupPage() {
                variant: "destructive",
                duration: 10000, // Longer duration for important messages
            });
-           setLoading(false); // Stop loading here as the process is incomplete
-           return; // Prevent redirection
+           // Throw the error to prevent redirection and let the outer catch handle it.
+           throw firestoreError;
       }
 
 
-      // If all steps succeed
+      // If all steps succeed (Auth Create, Auth Update, Firestore Create)
       toast({
           title: "Signup Successful!",
-          description: "Account created. Welcome!",
+          description: "Account created. Redirecting to login...",
           variant: 'default', // Use default for success
       });
-      console.log("Signup process completed successfully. Redirecting...");
-      router.push('/'); // Redirect to home page
+      console.log("Signup process completed successfully. Redirecting to login...");
+      router.push('/login'); // Redirect to login page
 
-    } catch (authError: any) { // Catch specific auth errors
-      console.error("Signup failed during Auth creation:", authError);
-      let friendlyError = 'Failed to create account. Please try again.';
-      if (authError.code === 'auth/email-already-in-use') {
-          friendlyError = 'This email address is already in use. Please try logging in.';
-      } else if (authError.code === 'auth/weak-password') {
-          friendlyError = 'The password is too weak. Please choose a stronger password.';
-      } else if (authError.code === 'auth/invalid-email') {
-           friendlyError = 'Please enter a valid email address.';
-      } else if (authError.code === 'auth/operation-not-allowed') {
-          friendlyError = 'Email/password accounts are not enabled. Contact support.';
-      } else if (authError.code === 'auth/network-request-failed') {
-           friendlyError = 'Network error. Please check your internet connection and try again.';
-      } else if (authError.code === 'auth/internal-error' || authError.code === 'auth/configuration-not-found') {
-            friendlyError = 'Server configuration error. Please contact support.';
+    } catch (error: any) { // Catch errors from Auth creation OR thrown Firestore error
+      console.error("Signup failed:", error);
+
+      // Handle Auth errors specifically
+      if (error.code && typeof error.code === 'string' && error.code.startsWith('auth/')) {
+          let friendlyError = 'Failed to create account. Please try again.';
+          if (error.code === 'auth/email-already-in-use') {
+              friendlyError = 'This email address is already in use. Please try logging in.';
+          } else if (error.code === 'auth/weak-password') {
+              friendlyError = 'The password is too weak. Please choose a stronger password.';
+          } else if (error.code === 'auth/invalid-email') {
+               friendlyError = 'Please enter a valid email address.';
+          } else if (error.code === 'auth/operation-not-allowed') {
+              friendlyError = 'Email/password accounts are not enabled. Contact support.';
+          } else if (error.code === 'auth/network-request-failed') {
+               friendlyError = 'Network error. Please check your internet connection and try again.';
+          } else if (error.code === 'auth/internal-error' || error.code === 'auth/configuration-not-found') {
+                friendlyError = 'Server configuration error. Please contact support.';
+          } else if (error.code === 'auth/api-key-not-valid') {
+                 friendlyError = 'Invalid Firebase API Key. Please check your environment configuration.';
+          }
+           // Set error state only for Auth errors here, Firestore errors set it inside the inner try/catch
+          setError(friendlyError);
+          toast({
+              title: "Signup Failed",
+              description: friendlyError,
+              variant: "destructive",
+          });
+      } else {
+          // Handle errors thrown from Firestore setDoc or other unexpected errors
+          // Error state and toast are already set inside the Firestore catch block if it originated there.
+          // If it's another unexpected error, set a generic message.
+          if (!error) { // Check if error state was already set by Firestore catch
+             setError(error.message || 'An unexpected error occurred during signup.');
+             toast({
+                 title: "Signup Error",
+                 description: error.message || 'An unexpected error occurred.',
+                 variant: "destructive",
+             });
+          }
       }
+      // Ensure loading is set to false even if there's an error before the finally block (though finally should handle it)
+      setLoading(false);
 
-
-      setError(friendlyError);
-      toast({
-          title: "Signup Failed",
-          description: friendlyError,
-          variant: "destructive",
-      });
     } finally {
-      // Always ensure loading is set to false when the process finishes or errors out
-      // unless handled specifically within the catch block (like the firestore error case)
-      // Check if it wasn't already set to false in a specific catch block
-       if (loading) { // Check the state variable directly
-          setLoading(false);
-          console.log("Setting loading state to false in finally block.");
-       } else {
-           console.log("Loading state already false, skipping set in finally block.");
-       }
-
+      // Always reset loading state regardless of success or failure
+      setLoading(false);
+      console.log("Signup attempt finished. Loading state set to false.");
     }
   };
 
@@ -225,4 +238,3 @@ export default function SignupPage() {
     </main>
   );
 }
-
