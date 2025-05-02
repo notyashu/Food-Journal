@@ -6,7 +6,6 @@
 - Fridge Storage Logging: Enable users to log when they put food in the fridge with a timestamp.
 - Event History Display: Display a clear and chronological history of logged food intakes and fridge storage events.
 - Server Sync: Sync data to a server for backup and multi-device access.
-- WhatsApp Alert: Send a WhatsApp alert to remind the last person who ate food to store it in the fridge.
 
 ## Style Guidelines:
 
@@ -16,7 +15,4 @@
 - Clean and readable font for easy scanning of logged entries.
 - Simple and intuitive layout with clear sections for logging and history.
 - Use food-related icons for different types of entries.
-
-## Original User Request:
-Create a app that keep tracks of when a person eats food and when kept the food in fridge. They should manually mark and timing should be automatically noted.
   
