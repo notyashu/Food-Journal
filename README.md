@@ -8,7 +8,7 @@ A Next.js application built with Firebase for authentication and data storage, a
 - Fridge Storage Logging: Enable users to log when they put food in the fridge with a timestamp.
 - Event History Display: Display a clear and chronological history of logged food intakes and fridge storage events.
 - Server Sync: Sync data to a server for backup and multi-device access.
-- 
+  
 ## Technologies Used
 
 *   **Next.js** (React Framework)
