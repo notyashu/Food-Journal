@@ -2,6 +2,13 @@
 
 A Next.js application built with Firebase for authentication and data storage, and integrated with Genkit AI. This project serves as a food journal application, allowing users to log events and potentially utilize AI features (via Genkit) in the future.
 
+## Core Features:
+
+- Food Intake Logging: Allow users to manually log when they eat food with a timestamp.
+- Fridge Storage Logging: Enable users to log when they put food in the fridge with a timestamp.
+- Event History Display: Display a clear and chronological history of logged food intakes and fridge storage events.
+- Server Sync: Sync data to a server for backup and multi-device access.
+- 
 ## Technologies Used
 
 *   **Next.js** (React Framework)
