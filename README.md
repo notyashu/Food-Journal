@@ -16,7 +16,7 @@ A Next.js application built with Firebase for authentication and data storage, a
 1.  **Clone the repository:**
 
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/notyashu/Food-Journal
     cd nextn
     ```
 
